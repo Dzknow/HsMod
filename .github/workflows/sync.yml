@@ -1,0 +1,60 @@
+name: Upstream Sync
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # Run at 17:00 CST (09:00 UTC)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync_and_build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: bepinex5
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Sync with Upstream
+        run: |
+          git remote add upstream https://github.com/Pik-4/HsMod.git
+          git fetch upstream
+          git merge upstream/bepinex5
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack Release Files
+        run: Compress-Archive -Path "HsMod/Release/*" -DestinationPath "HsMod.zip"
+
+      - name: Push changes
+        run: git push
+
+      - name: Generate Tag
+        id: tag
+        run: echo "name=v$(Get-Date -Format 'yyyy.MM.dd-HHmm')" >> $env:GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: bepinex5
+          files: HsMod.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
